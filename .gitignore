@@ -53,3 +53,23 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Canon ROM dumps: proprietary, never commit
+roms/
+
+# AstroML build products and local environments
+.build/
+dist/
+astro/build/
+tests/build/
+.astro-data/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+.venv/
+.pytest_cache
+template_midnight/
+# Full-size camera originals (carry serial number and owner EXIF); only the derived PGMs are tracked
+tests/data/raw/
