@@ -6,6 +6,7 @@
 #include <gui-common.h>
 #include <menu.h>
 #include <shoot.h>
+#include "camera.h"
 #include "capture.h"
 #include "draw.h"
 #include "live.h"
@@ -35,7 +36,9 @@ void astro_live_loop(astro_live_frame_fn on_frame, void *context, astro_live_sta
     for (int i = 0; i < MENU_CLOSE_STEPS && gui_menu_shown(); i++) {
         msleep(50); /* the menu is still closing */
     }
-    astro_hud("Hold still...   Q: stop", COLOR_WHITE);
+    char text[32];
+    snprintf(text, sizeof(text), "Hold still...   %s: stop", astro_q_key());
+    astro_hud(text, COLOR_WHITE);
     while (keep_running()) {
         astro_solve_status status = ASTRO_SOLVE_FEW_STARS;
         if (astro_capture_display(image)) {

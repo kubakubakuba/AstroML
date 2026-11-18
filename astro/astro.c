@@ -1,27 +1,34 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * AstroML: plate solving, target guiding, polar alignment and star focus for Magic Lantern
- * on the Canon 6D (firmware 1.1.6). Module entry points and callbacks only; the work is
- * done on the worker task (worker.c).
+ * AstroML: plate solving, target guiding, frame matching, polar alignment and star focus for
+ * Magic Lantern. The supported cameras are listed in cameras.toml. Module entry points and
+ * callbacks only; the work is done on the worker task (worker.c).
  */
 #include <module.h>
 #include <dryos.h>
 #include <menu.h>
+#include "camera.h"
 #include "menu.h"
 #include "playback.h"
 #include "result_view.h"
 #include "star_focus.h"
 #include "state.h"
+#include "usb.h"
 #include "worker.h"
 
 static unsigned int astro_init(void)
 {
-    if (!is_camera("6D", "1.1.6")) {
+    const astro_camera_profile *camera = astro_camera_detect();
+    if (!camera) {
         return CBR_RET_ERROR;
+    }
+    if (camera->focus_key == ASTRO_NO_KEY && astro_cfg_focus_shortcut == ASTRO_SHORTCUT_BUTTON) {
+        astro_cfg_focus_shortcut = ASTRO_SHORTCUT_OFF; /* no spare button on this body */
     }
     if (!astro_worker_start()) {
         return CBR_RET_ERROR;
     }
+    astro_usb_register();
     astro_menu_add();
     return 0;
 }
@@ -31,6 +38,8 @@ static unsigned int astro_deinit(void)
     if (!astro_worker_stop()) {
         return CBR_RET_ERROR; /* still working: refuse to unload */
     }
+    astro_usb_shutdown();
+    astro_result_release();
     astro_menu_remove();
     return 0;
 }

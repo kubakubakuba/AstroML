@@ -6,6 +6,7 @@
 #include <menu.h>
 #include <powersave.h>
 #include <string.h>
+#include "camera.h"
 #include "draw.h"
 #include "overlay.h"
 #include "result_view.h"
@@ -106,6 +107,18 @@ int astro_result_visible(void)
     return view.visible;
 }
 
+static void release_frame(void)
+{
+    free(view.frame);
+    view.frame = NULL;
+}
+
+void astro_result_release(void)
+{
+    view.visible = 0;
+    BMP_LOCK(release_frame());
+}
+
 void astro_result_hide(void)
 {
     view.visible = 0;
@@ -137,8 +150,8 @@ static void draw_text(void)
         bmp_printf(FONT(FONT_SMALL, COLOR_RED, COLOR_BLACK), 430, 438, "%s", target);
     }
     bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), 12, 461,
-               "%s %d.%02d s  lens ~%s  Q: back", r->hinted ? "Hinted" : "Blind",
-               r->elapsed_ms / 1000, r->elapsed_ms % 1000 / 10, r->lens_text);
+               "%s %d.%02d s  lens ~%s  %s: back", r->hinted ? "Hinted" : "Blind",
+               r->elapsed_ms / 1000, r->elapsed_ms % 1000 / 10, r->lens_text, astro_q_key());
 }
 
 /* Whole screen: frame, overlays, matched stars and text. Call under BMP_LOCK. */
@@ -146,7 +159,8 @@ static void paint(void)
 {
     uint8_t *vram = bmp_vram();
 
-    if (!vram) {
+    /* Checked again under the lock: the frame may have been released while waiting. */
+    if (!vram || !view.visible || !view.frame) {
         return;
     }
     bmp_fill(COLOR_BLACK, 0, 0, 720, 480);

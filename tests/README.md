@@ -17,6 +17,9 @@ ctypes (`native.py`). The EXIF fuzzer additionally runs under AddressSanitizer.
 | `test_time_altaz.py` | Calendar, GMST, precession and alt/az against floating-point references. |
 | `test_exif.py` | GPS EXIF in JPEG and CR2/TIFF (both byte orders), plus a fuzzer. |
 | `test_real_frames.py` | Two real 6D frames (`tests/data/RAW1.PGM`, `RAW2.PGM`): RAW2 must solve to Orion and project known stars onto bright pixels; RAW1 is a marginal frame (strict xfail on the default index). |
+| `test_frame_match.py` | Frame matching: shift, rotation sign and size, scale, mirror and the projected outline, on synthetic solutions and on RAW2's own solution turned by 5 degrees. |
+| `test_cameras.py` | `cameras.toml` schema errors, the generated C table, and the focus-shortcut policy with and without a camera button. |
+| `test_ptp_pack.py` | The USB (PTP) record read by the companion app: byte layout, endianness, the north angle. `companion/tests` parses the same bytes. |
 | `test_polar.py` | Recovering the mount axis from two simulated frames, and the alt/az error split. |
 
 Deliberate differences from the original are listed in `docs/PORT_REVIEW.md`.

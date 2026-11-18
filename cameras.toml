@@ -1,0 +1,58 @@
+# Every camera-specific value AstroML uses. Add or change a camera here and nowhere else:
+# the build generates the module's camera table from this file, and the build checks, QEMU
+# and host tests read it too. All cameras run magiclantern_simplified ed3e7c0 (2025-06-20).
+#
+# firmware          Canon firmware version; the module refuses to load on any other
+# ml_platform       ML platform directory; its build provides the exported-symbol list
+# symbols           that symbol list, checked against every function the module imports
+# sensor_width_mm   sensor width; turns a solved field of view into a focal length
+# image_width_px    width of a full-size photo; the companion turns pixels into arcseconds
+# focus_key         raw Canon button code for the focus shortcut (platform gui.h);
+#                   leave it out when no spare button is verified
+# focus_key_name    that button's label, shown in the menu help
+# q_key_name        the key ML treats as Q: opens the gallery solve (Play -> key -> SET),
+#                   cancels and closes; shown in on-screen hints
+# qemu_model        qemu-eos machine name
+# qemu_serial_flash the emulator also needs roms/<camera>/SFDATA.BIN (serial flash dump)
+# qemu_dcim         folder the emulated camera shoots into, for test photos
+# status            the furthest the module has been verified: build, qemu or hardware
+
+[cameras.6D]
+firmware = "1.1.6"
+ml_platform = "6D.116"
+symbols = "6D_116.sym"
+sensor_width_mm = 35.8
+image_width_px = 5472
+focus_key = 0x20            # BGMT_LIGHT, the top-LCD illumination button
+focus_key_name = "LCD light"
+q_key_name = "Q"
+qemu_model = "6D"
+qemu_serial_flash = true
+qemu_dcim = "100CANON"
+status = "qemu"
+
+[cameras.600D]
+firmware = "1.0.2"
+ml_platform = "600D.102"
+symbols = "600D_102.sym"
+sensor_width_mm = 22.3
+image_width_px = 5184
+focus_key = 0x08            # BGMT_PRESS_DISP
+focus_key_name = "DISP"
+q_key_name = "Q"
+qemu_model = "600D"
+qemu_serial_flash = false
+qemu_dcim = "100CANON"
+status = "build"
+
+[cameras.100D]
+firmware = "1.0.1"
+ml_platform = "100D.101"
+symbols = "100D_101.sym"
+sensor_width_mm = 22.3
+image_width_px = 5184
+q_key_name = "Av"           # Q is shared with SET; ML uses Av as Q on this body
+qemu_model = "100D"
+qemu_serial_flash = true
+qemu_dcim = "100CANON"
+status = "build"

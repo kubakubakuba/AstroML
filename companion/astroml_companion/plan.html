@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AstroML plan</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 30rem; padding: 1rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 1.25rem 0 .25rem; }
+  nav a { margin-right: 1rem; }
+  form { display: grid; grid-template-columns: max-content 1fr; gap: .4rem .75rem; align-items: center; }
+  input { font: inherit; width: 100%; box-sizing: border-box; }
+  .hint { grid-column: 1 / -1; opacity: .65; font-size: .9rem; margin: 0; }
+  button { font: inherit; padding: .5rem .9rem; margin-top: .75rem; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: .9rem; }
+  td, th { text-align: left; padding: .15rem .4rem; }
+  svg { width: 100%; max-height: 14rem; margin-top: .5rem; }
+  rect { fill: none; stroke: currentColor; stroke-width: .01; }
+  text { fill: currentColor; font-size: .12px; }
+  .error { color: #c0392b; }
+</style>
+</head>
+<body>
+<h1>Plan</h1>
+<nav><a href="/">Status</a><a href="/plan">Plan</a></nav>
+
+<form id="plan">
+  <label for="target">Target</label><input id="target" placeholder="M31, NGC 7000, Crescent Nebula">
+  <p class="hint">Or leave it empty and give RA/Dec in degrees.</p>
+  <label for="ra_deg">RA (deg)</label><input id="ra_deg" type="number" step="any">
+  <label for="dec_deg">Dec (deg)</label><input id="dec_deg" type="number" step="any">
+  <label for="north_deg">Rotation</label><input id="north_deg" type="number" step="any" value="0">
+  <p class="hint">North's direction on screen, degrees clockwise from up (0: north up).</p>
+  <label for="columns">Columns</label><input id="columns" type="number" min="1" max="10" value="1">
+  <label for="rows">Rows</label><input id="rows" type="number" min="1" max="10" value="1">
+  <label for="overlap">Overlap (%)</label><input id="overlap" type="number" min="0" max="89" value="20">
+  <label for="frames">Frames / panel</label><input id="frames" type="number" min="1" max="999" value="10">
+  <label for="exposure_s">Exposure (s)</label><input id="exposure_s" type="number" min="1" max="1800" value="60">
+  <label for="dither_every">Dither every</label><input id="dither_every" type="number" min="0" value="0">
+  <p class="hint">Frames between dithers (0: off). Needs a mount: the CEM60 over serial, or the ST-4 board.</p>
+  <label for="settle_s">Settle (s)</label><input id="settle_s" type="number" min="0" value="5">
+  <label for="fov_deg">Field (deg)</label><input id="fov_deg" type="number" step="any" placeholder="from the last solve">
+</form>
+<button id="save">Save plan</button>
+<p id="error" class="error"></p>
+
+<h2>Panels</h2>
+<svg id="preview" viewBox="-1 -1 2 2"></svg>
+<table><thead><tr><th>#</th><th>RA</th><th>Dec</th><th>Rotation</th></tr></thead>
+<tbody id="panels"></tbody></table>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const numbers = ["ra_deg", "dec_deg", "north_deg", "columns", "rows", "frames", "exposure_s",
+                 "dither_every", "settle_s", "fov_deg"];
+
+function show(panels) {
+  const svg = $("preview");
+  svg.replaceChildren();
+  const extent = Math.max(1, ...panels.map((p) => Math.abs(p.offset[0]) + .5),
+                          ...panels.map((p) => Math.abs(p.offset[1]) + 1 / 3)) * 1.1;
+  svg.setAttribute("viewBox", `${-extent} ${-extent} ${2 * extent} ${2 * extent}`);
+  const tbody = $("panels");
+  tbody.replaceChildren();
+  for (const p of panels) {
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", p.offset[0] - .5); rect.setAttribute("y", p.offset[1] - 1 / 3);
+    rect.setAttribute("width", 1); rect.setAttribute("height", 2 / 3);
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", p.offset[0] - .05); label.setAttribute("y", p.offset[1] + .04);
+    label.textContent = p.index + 1;
+    svg.append(rect, label);
+    const row = tbody.insertRow();
+    for (const value of [p.index + 1, p.ra_deg.toFixed(3), p.dec_deg.toFixed(3),
+                         p.north_deg.toFixed(1) + "°"]) row.insertCell().textContent = value;
+  }
+}
+
+$("save").onclick = async () => {
+  const body = {overlap: Number($("overlap").value) / 100};
+  const target = $("target").value.trim();
+  if (target) body.target = target;
+  for (const id of numbers) {
+    const value = $(id).value;
+    if (value !== "" && !(target && (id === "ra_deg" || id === "dec_deg"))) body[id] = Number(value);
+  }
+  const response = await fetch("/api/plan", {method: "POST", headers: {"Content-Type": "application/json"},
+                                             body: JSON.stringify(body)});
+  const data = await response.json();
+  $("error").textContent = response.ok ? "" : data.error;
+  if (response.ok) {
+    show(data.panels);
+    $("ra_deg").value = data.plan.ra_deg.toFixed(4);
+    $("dec_deg").value = data.plan.dec_deg.toFixed(4);
+  }
+};
+
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  if (s.session.panel_list.length) show(s.session.panel_list);
+});
+</script>
+</body>
+</html>

@@ -10,9 +10,6 @@
 #define ASTRO_IMAGE_HEIGHT 240
 #define ASTRO_IMAGE_BYTES  (ASTRO_IMAGE_WIDTH * ASTRO_IMAGE_HEIGHT)
 
-/* Canon 6D: 35.8 mm wide full-frame sensor, in 0.1 mm. */
-#define ASTRO_SENSOR_WIDTH_X10 358
-
 #define ASTRO_DATA_DIR "ML/ASTRO/"
 
 enum { ASTRO_FOCAL_BLIND = 0, ASTRO_FOCAL_FROM_LENS, ASTRO_FOCAL_MANUAL };
@@ -20,7 +17,7 @@ enum {
     ASTRO_SHORTCUT_OFF = 0,
     ASTRO_SHORTCUT_HALFSHUTTER,
     ASTRO_SHORTCUT_INFO,
-    ASTRO_SHORTCUT_LIGHT
+    ASTRO_SHORTCUT_BUTTON /* the camera's spare button from cameras.toml */
 };
 
 /* Saved in ML/SETTINGS/ASTRO.CFG (see state.c for names and defaults). */
@@ -45,6 +42,19 @@ extern int astro_cfg_utc_offset;      /* camera clock minus UTC, minutes */
 extern int astro_cfg_location_time;   /* fix time, seconds since J2000 UTC */
 extern int astro_cfg_location_folder; /* DCIM folder number of the source photo */
 extern int astro_cfg_location_file;   /* file number of the source photo */
+
+/* Frame-match reference, one int each: ML saves only single ints. */
+extern int astro_cfg_ref_valid;
+extern int astro_cfg_ref_ra0;  /* 1e-4 degree */
+extern int astro_cfg_ref_dec0; /* 1e-4 degree */
+extern int astro_cfg_ref_m0;   /* astro_wcs m_q24[0..3] */
+extern int astro_cfg_ref_m1;
+extern int astro_cfg_ref_m2;
+extern int astro_cfg_ref_m3;
+extern int astro_cfg_ref_t0; /* astro_wcs t_q16[0..1] */
+extern int astro_cfg_ref_t1;
+extern int astro_cfg_ref_fov;    /* centidegrees */
+extern int astro_cfg_ref_source; /* astro_frame_source */
 
 /* One-line status of the last action, shown in menus and notifications. */
 void astro_set_status(const char *format, ...);

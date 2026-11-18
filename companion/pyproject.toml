@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astroml-companion"
+version = "0.1.0"
+description = "Reads AstroML plate solutions from a Canon camera over USB and serves them on a Wi-Fi hotspot."
+license = "GPL-2.0-only"
+requires-python = ">=3.11"
+dependencies = ["pyusb>=1.2", "pyserial>=3.5", "typer>=0.9"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+astroml-companion = "astroml_companion.cli:app"
+
+[tool.setuptools]
+packages = ["astroml_companion", "astroml_companion.mount"]
+
+[tool.setuptools.package-data]
+astroml_companion = ["page.html", "plan.html", "catalog.json", "cameras.json"]

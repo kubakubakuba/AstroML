@@ -3,6 +3,7 @@
 #include <dryos.h>
 #include <bmp.h>
 #include "core/altaz.h"
+#include "camera.h"
 #include "draw.h"
 #include "guide.h"
 #include "live.h"
@@ -53,8 +54,8 @@ static void on_frame(void *unused, astro_solve_status status, const astro_solve_
     char text[HUD_TEXT];
 
     if (status != ASTRO_SOLVE_OK) {
-        snprintf(text, sizeof(text), "%s: hold still / raise LV gain   Q: stop",
-                 astro_solve_status_text(status));
+        snprintf(text, sizeof(text), "%s: hold still / raise LV gain   %s: stop",
+                 astro_solve_status_text(status), astro_q_key());
         astro_hud(text, COLOR_WHITE);
         return;
     }
@@ -71,6 +72,10 @@ void astro_guide_run(void)
 {
     astro_live_stats stats;
 
+    if (!astro_cfg_mark_target) {
+        astro_set_status("Turn on Target -> Guidance first");
+        return;
+    }
     astro_target_lookup();
     if (!astro_target_get()->valid) {
         astro_set_status("Pick a target first");

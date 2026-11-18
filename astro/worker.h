@@ -18,6 +18,8 @@ typedef enum {
     ASTRO_ACTION_AUTOFOCUS,
     ASTRO_ACTION_MEASURE_FOCUS,
     ASTRO_ACTION_READ_LOCATION,
+    ASTRO_ACTION_FRAME_MATCH,
+    ASTRO_ACTION_EXPOSE,
     /* Background: dropped silently when the worker has anything else to do. */
     ASTRO_ACTION_FOCUS_SCORE,
     ASTRO_ACTION_LOOKUP_TARGET,

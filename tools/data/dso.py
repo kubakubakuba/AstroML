@@ -237,13 +237,34 @@ def write(cat: Catalogue, dest: pathlib.Path) -> None:
             f.write(label.ljust(NAME_BYTES, b"\0"))
 
 
-def build(openngc_dir: pathlib.Path, barnard: pathlib.Path, sharpless: pathlib.Path,
-          dest: pathlib.Path) -> dict[str, int]:
-    """Writes DSO.BIN/.KEY/.NAM. Returns designations per catalogue."""
+def load(openngc_dir: pathlib.Path, barnard: pathlib.Path,
+         sharpless: pathlib.Path) -> Catalogue:
     cat = Catalogue()
     load_openngc(cat, [openngc_dir / "NGC.csv", openngc_dir / "addendum.csv"])
     load_barnard(cat, barnard)
     load_sharpless(cat, sharpless)
+    return cat
+
+
+DESIGNATION_FORMATS = {"M": "M{}", "NGC": "NGC {}", "IC": "IC {}", "C": "C {}", "B": "B {}",
+                       "Sh2": "Sh2-{}"}
+
+
+def companion_entries(cat: Catalogue) -> dict[str, list]:
+    """Designation -> [ra, dec, common name] for the companion app's target lookup."""
+    names = {cid: DESIGNATION_FORMATS[name] for name, cid in CATALOGUES.items()}
+    entries = {}
+    for (catalogue, num), index in sorted(cat.keys.items()):
+        o = cat.objects[index]
+        common = cat.names[o["name"]].decode("ascii") if o["name"] else ""
+        entries[names[catalogue].format(num)] = [round(o["ra"], 4), round(o["dec"], 4), common]
+    return entries
+
+
+def build(openngc_dir: pathlib.Path, barnard: pathlib.Path, sharpless: pathlib.Path,
+          dest: pathlib.Path) -> dict[str, int]:
+    """Writes DSO.BIN/.KEY/.NAM. Returns designations per catalogue."""
+    cat = load(openngc_dir, barnard, sharpless)
     write(cat, dest)
     counts = {name: sum(1 for c, _ in cat.keys if c == cid) for name, cid in CATALOGUES.items()}
     counts["objects"] = len(cat.objects)

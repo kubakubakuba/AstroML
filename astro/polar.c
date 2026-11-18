@@ -8,6 +8,7 @@
 #include <bmp.h>
 #include <notify_box.h>
 #include "core/polar_math.h"
+#include "camera.h"
 #include "capture.h"
 #include "draw.h"
 #include "live.h"
@@ -118,7 +119,8 @@ static void correction_text(const astro_polar_error *e, int have_site, char *out
     int az = e->azimuth_error < 0 ? -e->azimuth_error : e->azimuth_error;
 
     if (e->separation < GOOD_ENOUGH) {
-        snprintf(out, size, "ALIGNED (%d arcsec)   Q: stop", e->separation * 36 / 100);
+        snprintf(out, size, "ALIGNED (%d arcsec)   %s: stop", e->separation * 36 / 100,
+                 astro_q_key());
     } else if (!have_site) {
         snprintf(out, size, "%d.%02d deg off: move to the circle  (set location)",
                  e->separation / 10000, e->separation / 100 % 100);
@@ -160,7 +162,8 @@ static void on_frame(void *unused, astro_solve_status status, const astro_solve_
     int have_site = astro_location_site(&site);
 
     if (status != ASTRO_SOLVE_OK) {
-        snprintf(text, sizeof(text), "%s   Q: stop", astro_solve_status_text(status));
+        snprintf(text, sizeof(text), "%s   %s: stop", astro_solve_status_text(status),
+                 astro_q_key());
         astro_hud(text, COLOR_WHITE);
         return;
     }
@@ -169,7 +172,8 @@ static void on_frame(void *unused, astro_solve_status status, const astro_solve_
     }
     if (astro_polar_measure(&result->sky.wcs, polar.axis.axis_x_q4, polar.axis.axis_y_q4, &site,
                             astro_now_utc(), &error) != ASTRO_POLAR_OK) {
-        astro_hud("Axis outside the solved field   Q: stop", COLOR_WHITE);
+        snprintf(text, sizeof(text), "Axis outside the solved field   %s: stop", astro_q_key());
+        astro_hud(text, COLOR_WHITE);
         return;
     }
     BMP_LOCK(replace_arrow(&error));

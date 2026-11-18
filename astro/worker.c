@@ -4,6 +4,8 @@
 #include <dryos.h>
 #include <mem.h>
 #include "star_focus.h"
+#include "expose.h"
+#include "frame_match.h"
 #include "guide.h"
 #include "location.h"
 #include "overlay.h"
@@ -25,6 +27,7 @@ static struct {
     volatile int busy;    /* a foreground action is posted or running */
     volatile int cancel;
     volatile int stopped;
+    volatile int closing; /* QUIT accepted: nothing may queue behind it */
     volatile astro_action running;
     uint8_t *image;
 } worker;
@@ -63,12 +66,19 @@ int astro_request(astro_action action)
 {
     int accepted = 0;
 
+    if (!worker.lock) {
+        return 0; /* the worker never started */
+    }
     take_semaphore(worker.lock, 0);
-    if (action == ASTRO_ACTION_QUIT || (is_foreground(action) && !worker.busy) ||
-        (!is_foreground(action) && !worker.pending)) {
+    /* After QUIT the task exits, so a request queued behind it would never run and its
+     * busy flag would never clear. */
+    if (!worker.closing &&
+        (action == ASTRO_ACTION_QUIT || (is_foreground(action) && !worker.busy) ||
+         (!is_foreground(action) && !worker.pending))) {
         accepted = msg_queue_post(worker.queue, (uint32_t)action) == 0;
     }
     if (accepted) {
+        worker.closing = action == ASTRO_ACTION_QUIT;
         worker.pending++;
         if (is_foreground(action)) {
             worker.busy = 1;
@@ -114,6 +124,12 @@ static void run(astro_action action)
         case ASTRO_ACTION_READ_LOCATION:
             astro_location_read_last_photo();
             break;
+        case ASTRO_ACTION_FRAME_MATCH:
+            astro_frame_match_run();
+            break;
+        case ASTRO_ACTION_EXPOSE:
+            astro_expose_run();
+            break;
         default:
             break;
     }
@@ -151,13 +167,31 @@ static void worker_task(void *unused)
     worker.stopped = 1;
 }
 
+/* DryOS reports failure as NULL or as an error code with the low bit set (ML's IS_ERROR).
+ * The firmware exports no delete calls, so a failed start leaks its objects and the module
+ * refuses to load. */
+static int valid(const void *id)
+{
+    return id && !IS_ERROR(id);
+}
+
 int astro_worker_start(void)
 {
-    worker.lock = create_named_semaphore("astro_lock", 1);
-    worker.queue = (struct msg_queue *)msg_queue_create("astro_queue", QUEUE_LENGTH);
+    struct semaphore *lock = create_named_semaphore("astro_lock", 1);
+    struct msg_queue *queue = (struct msg_queue *)msg_queue_create("astro_queue", QUEUE_LENGTH);
+
+    if (!valid(lock) || !valid(queue)) {
+        return 0;
+    }
+    worker.queue = queue;
     worker.stopped = 0;
-    return worker.lock && worker.queue &&
-           task_create("astro_worker", TASK_PRIORITY, TASK_STACK, worker_task, 0);
+    worker.closing = 0;
+    uint32_t task = task_create("astro_worker", TASK_PRIORITY, TASK_STACK, worker_task, 0);
+    if (!task || IS_ERROR(task)) {
+        return 0;
+    }
+    worker.lock = lock; /* only now may requests be posted */
+    return 1;
 }
 
 int astro_worker_stop(void)

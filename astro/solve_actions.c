@@ -5,11 +5,13 @@
 #include <gui-common.h>
 #include <shoot.h>
 #include "capture.h"
+#include "frame_match.h"
 #include "overlay.h"
 #include "progress.h"
 #include "result_view.h"
 #include "solve_actions.h"
 #include "state.h"
+#include "usb.h"
 #include "worker.h"
 
 #define SETTLE_MS       3000 /* let tripod vibration die down; not an exposure */
@@ -28,6 +30,7 @@ const astro_solve_result *astro_last_solution(void)
 void astro_remember_solution(const astro_solve_result *result)
 {
     last_solution = *result;
+    astro_usb_publish(result);
 }
 
 /* Waits out the settling delay; returns 0 if Live View went away or Q was pressed. */
@@ -97,6 +100,7 @@ void astro_run_solve(int from_test_file)
         return;
     }
     astro_build_overlay(&result, &result_scene);
+    result.source = from_test_file ? ASTRO_REFERENCE_FILE : ASTRO_REFERENCE_LIVEVIEW;
     astro_remember_solution(&result);
     astro_set_status("Solved %d stars in %d.%02d s", result.sky.matched, result.elapsed_ms / 1000,
                      result.elapsed_ms % 1000 / 10);

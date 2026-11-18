@@ -15,6 +15,7 @@
 #include "core/focus_metric.h"
 #include "core/shortcut.h"
 #include "capture.h"
+#include "camera.h"
 #include "star_focus.h"
 #include "state.h"
 #include "worker.h"
@@ -190,17 +191,18 @@ unsigned int astro_focus_key(unsigned int key)
     return 1;
 }
 
-/* The 6D's LCD-light button has no portable key code: read the raw Canon event. */
+/* The spare button (cameras.toml focus_key) has no portable key code: read the raw event. */
 unsigned int astro_focus_raw_key(unsigned int event_pointer)
 {
     struct event *event = (struct event *)(uintptr_t)event_pointer;
 
-    if (astro_cfg_focus_shortcut != ASTRO_SHORTCUT_LIGHT || !event || event->type != 0) {
+    if (astro_cfg_focus_shortcut != ASTRO_SHORTCUT_BUTTON || !event || event->type != 0) {
         return 1;
     }
     astro_shortcut_state state = {1, lv && !is_movie_mode() && display_idle(), gui_menu_shown(),
                                   astro_busy(), astro_focus_lens_ready()};
-    astro_shortcut_action action = astro_shortcut_decide(event->param, &state);
+    astro_shortcut_action action =
+        astro_shortcut_decide(event->param, astro_camera()->focus_key, &state);
     if (action == ASTRO_SHORTCUT_AUTOFOCUS) {
         astro_request(ASTRO_ACTION_AUTOFOCUS);
     } else if (action == ASTRO_SHORTCUT_TOGGLE_READOUT) {

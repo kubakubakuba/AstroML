@@ -8,7 +8,7 @@ from datetime import date
 
 import typer
 
-from . import paths
+from . import cameras, paths
 
 app = typer.Typer(help="Build installable ZIPs for the card root.", no_args_is_help=True)
 
@@ -27,7 +27,8 @@ CONST.BIN: d3-celestial by Olaf Frohn (BSD-3-Clause).
 Package generated {date.today()}.
 """
 
-README = """AstroML for Canon 6D firmware 1.1.6, Magic Lantern build of 2025-06-20 (ed3e7c0).
+README = """AstroML for Magic Lantern build 2025-06-20 (ed3e7c0), on these Canon cameras:
+{cameras}
 
 Install: extract this ZIP at the card root of a card that already boots Magic Lantern.
 Nothing else is replaced: autoexec.bin and your ML settings stay as they are.
@@ -36,6 +37,12 @@ ML/SETTINGS/ASTRO.EN enables the module. Delete it to disable AstroML.
 The module adds an "Astro" tab to the ML menu.
 Auto focus sends lens commands. It is not hardware validated yet.
 """
+
+
+def readme() -> str:
+    lines = "\n".join(f"  {c.model} firmware {c.firmware} (verified: {c.status})"
+                       for c in cameras.load().values())
+    return README.format(cameras=lines)
 
 
 def write_files(out: zipfile.ZipFile, data: pathlib.Path, names) -> None:
@@ -53,9 +60,9 @@ def sha256(path: pathlib.Path) -> str:
 @app.command("module")
 def package_module(module: pathlib.Path = typer.Option(paths.MODULE_BUILD, help="Built astro.mo."),
                    data: pathlib.Path = typer.Option(paths.DATA, help="Generated data files."),
-                   dest: pathlib.Path = typer.Option(paths.DIST / f"astroml-{paths.CAMERA}.zip"),
+                   dest: pathlib.Path = typer.Option(paths.DIST / "astroml.zip"),
                    test_files: bool = typer.Option(False, help="Include TEST*.PGM if present.")):
-    """ASTRO.MO, enable flag and all ML/ASTRO data for the 6D."""
+    """ASTRO.MO, enable flag and all ML/ASTRO data; one ZIP for every camera in cameras.toml."""
     if not module.is_file():
         raise typer.BadParameter(f"{module} missing: run scripts/build.sh")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -67,7 +74,7 @@ def package_module(module: pathlib.Path = typer.Option(paths.MODULE_BUILD, help=
         if test_files:
             write_files(out, data, sorted(p.name for p in data.glob("TEST*.PGM")))
         out.writestr("ML/ASTRO/CREDITS.TXT", CREDITS, compress_type=zipfile.ZIP_DEFLATED)
-        out.writestr("ML/ASTRO/README.TXT", README, compress_type=zipfile.ZIP_DEFLATED)
+        out.writestr("ML/ASTRO/README.TXT", readme(), compress_type=zipfile.ZIP_DEFLATED)
     with zipfile.ZipFile(dest) as z:
         assert z.testzip() is None
         assert z.read("ML/MODULES/ASTRO.MO") == module_bytes, "stale ASTRO.MO in ZIP"

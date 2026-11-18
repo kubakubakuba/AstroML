@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One-time setup: Python venv, Magic Lantern at the camera's commit, ARM toolchain, the 6D
-# platform build (symbol table + ML ZIP for QEMU) and the ML/ASTRO data files.
+# One-time setup: Python venv, Magic Lantern at the cameras' commit, ARM toolchain, one ML
+# platform build per camera in cameras.toml (symbol table + ML ZIP for QEMU), ML/ASTRO data.
 # Everything lands in .venv/, .build/ and .astro-data/ (all gitignored). No sudo needed.
 set -euo pipefail
 
@@ -43,11 +43,14 @@ if ! command -v hostname >/dev/null; then
     chmod +x "$BUILD/bin/hostname"
 fi
 
-echo "== Magic Lantern 6D.116 build (symbol table and card ZIP)"
-PATH="$BUILD/bin:$PATH" make -C "$BUILD/magiclantern/platform/6D.116" \
-    ARM_BINPATH="$TOOLCHAIN_BIN" -j"$(nproc)" >"$BUILD/ml-6d-build.log" 2>&1 ||
-    { tail -20 "$BUILD/ml-6d-build.log"; exit 1; }
-ls -l "$BUILD/magiclantern/platform/6D.116/build/magiclantern.zip"
+# One ML build per camera in cameras.toml: its symbol table, and the card ZIP for QEMU.
+for platform in $("$REPO/.venv/bin/astroml" cameras platforms); do
+    echo "== Magic Lantern $platform build"
+    PATH="$BUILD/bin:/usr/bin:$PATH" make -C "$BUILD/magiclantern/platform/$platform" \
+        ARM_BINPATH="$TOOLCHAIN_BIN" -j"$(nproc)" >"$BUILD/ml-$platform-build.log" 2>&1 ||
+        { tail -20 "$BUILD/ml-$platform-build.log"; exit 1; }
+    ls -l "$BUILD/magiclantern/platform/$platform/build/magiclantern.zip"
+done
 
 echo "== ML/ASTRO data"
 "$REPO/.venv/bin/astroml" data all

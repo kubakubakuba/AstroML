@@ -1,4 +1,5 @@
-"""`astroml qemu ...`: build qemu-eos, prepare a virtual SD card and drive the emulated 6D."""
+"""`astroml qemu ...`: build qemu-eos, prepare a virtual SD card and drive an emulated camera
+(any camera in cameras.toml; --camera, default 6D)."""
 from __future__ import annotations
 
 import lzma
@@ -13,15 +14,13 @@ import zipfile
 
 import typer
 
-from . import paths
+from . import cameras, paths
 
-app = typer.Typer(help="Emulate the Canon 6D with qemu-eos.", no_args_is_help=True)
+app = typer.Typer(help="Emulate a camera from cameras.toml with qemu-eos.", no_args_is_help=True)
 
 RUN_DIR = paths.BUILD / "qemu-run"
-CAMERA_BUILD = paths.ML_TREE / "platform" / paths.CAMERA / "build"
 BASE_SD_IMAGE = paths.ML_TREE / "platform" / "sd.qcow2.xz"
 MONITOR = RUN_DIR / "monitor"
-ROM0_SIZE_6D = 8 << 20  # qemu-eos model_list.c: 6D rom0_size
 
 # Optional network/storage backends are disabled: the camera needs none of them, and QEMU
 # 4.2.1 no longer compiles against current libnfs and friends.
@@ -90,6 +89,25 @@ class Card:
             return
         subprocess.run(["mcopy", "-o", "-i", self.image, str(source), f"::/{path}"], check=True)
 
+    def folders(self, path: str) -> list[str]:
+        listing = subprocess.run(["mdir", "-b", "-i", self.image, f"::/{path}"],
+                                 capture_output=True, text=True, check=False).stdout
+        return [line.rstrip("/").rsplit("/", 1)[-1] for line in listing.splitlines()
+                if line.endswith("/")]
+
+    def remove_tree(self, path: str) -> None:
+        subprocess.run(["mdeltree", "-i", self.image, f"::/{path}"], check=True,
+                       capture_output=True)
+
+
+def keep_one_dcim_folder(card: Card, folder: str) -> None:
+    """The base image comes with DCIM/100EOS5D. DCF folder numbers must be unique: with two
+    folders numbered 100, Canon ignores both, playback finds no photos and the camera opens an
+    empty 101 folder. Only the camera's own folder is kept."""
+    for name in card.folders("DCIM"):
+        if name[:3].isdigit() and name != folder:
+            card.remove_tree(f"DCIM/{name}")
+
 
 def install_ml_zip(card: Card, ml_zip: pathlib.Path) -> None:
     with zipfile.ZipFile(ml_zip) as z, tempfile.TemporaryDirectory() as tmp:
@@ -99,24 +117,34 @@ def install_ml_zip(card: Card, ml_zip: pathlib.Path) -> None:
                 card.put(item, str(item.relative_to(tmp)))
 
 
+CAMERA_OPTION = typer.Option("6D", "--camera", help="Camera from cameras.toml.")
+
+
+def camera_build(camera: cameras.Camera) -> pathlib.Path:
+    return paths.ML_TREE / "platform" / camera.ml_platform / "build"
+
+
 @app.command()
-def sd(ml_zip: pathlib.Path = typer.Option(CAMERA_BUILD / "magiclantern.zip",
-                                           help="ML build ZIP, e.g. the official "
-                                                "magiclantern.2025-06-20.6D.116.zip."),
+def sd(camera_name: str = CAMERA_OPTION,
+       ml_zip: pathlib.Path = typer.Option(None, help="ML build ZIP. Default: this tree's build "
+                                                      "for the camera."),
        module: pathlib.Path = typer.Option(paths.MODULE_BUILD, help="astro.mo to install."),
        data: pathlib.Path = typer.Option(paths.DATA, help="ML/ASTRO data files."),
        extra: list[pathlib.Path] = typer.Option([], help="Files for ML/ASTRO. Default: the "
                                                         "synthetic TEST*.PGM and tests/data/*.PGM."),
-       dcim: list[pathlib.Path] = typer.Option([], help="Photos for DCIM/100CANON/, where the "
-                                                        "emulated 6D shoots. Default: IMG_*.JPG.")):
+       dcim: list[pathlib.Path] = typer.Option([], help="Photos for the camera's DCIM folder "
+                                                        "(qemu_dcim). Default: IMG_*.JPG.")):
     """Build sd.qcow2/cf.qcow2 with ML, ASTRO.MO (enabled) and its data, for --boot runs."""
+    camera = cameras.get(camera_name)
+    build = camera_build(camera)
+    ml_zip = ml_zip or build / "magiclantern.zip"
     test_frames = sorted(data.glob("TEST*.PGM")) + sorted((paths.REPO / "tests/data").glob("*.PGM"))
     extra = extra or test_frames
     dcim = dcim or sorted(data.glob("IMG_*.JPG"))
     if not BASE_SD_IMAGE.exists():
         raise typer.BadParameter(f"{BASE_SD_IMAGE} missing: clone ML first (scripts/setup_env.sh)")
     if not ml_zip.is_file():
-        raise typer.BadParameter(f"{ml_zip} missing: build ML or pass --ml-zip")
+        raise typer.BadParameter(f"{ml_zip} missing: build ML {camera.ml_platform} or pass --ml-zip")
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     qcow = RUN_DIR / "base.qcow2"
     raw = RUN_DIR / "sd.raw"
@@ -135,38 +163,68 @@ def sd(ml_zip: pathlib.Path = typer.Option(CAMERA_BUILD / "magiclantern.zip",
             card.put(data / name, f"ML/ASTRO/{name}")
     for item in extra:
         card.put(item, f"ML/ASTRO/{item.name.upper()}")
+    keep_one_dcim_folder(card, camera.qemu_dcim)
+    card.mkdir("DCIM")
+    card.mkdir(f"DCIM/{camera.qemu_dcim}")
     for photo in dcim:
-        card.put(photo, f"DCIM/100CANON/{photo.name.upper()}")
+        card.put(photo, f"DCIM/{camera.qemu_dcim}/{photo.name.upper()}")
 
-    CAMERA_BUILD.mkdir(parents=True, exist_ok=True)
-    sd_image = CAMERA_BUILD / "sd.qcow2"
+    build.mkdir(parents=True, exist_ok=True)
+    sd_image = build / "sd.qcow2"
     run(["qemu-img", "convert", "-f", "raw", "-O", "qcow2", str(raw), str(sd_image)])
-    shutil.copy2(sd_image, CAMERA_BUILD / "cf.qcow2")  # the 6D model also expects a CF drive
+    shutil.copy2(sd_image, build / "cf.qcow2")  # some models also expect a CF drive
     raw.unlink()
     qcow.unlink()
-    typer.echo(f"Card image ready: {sd_image}")
+    typer.echo(f"{camera.model} card image ready: {sd_image}")
 
 
-def rom_dir(trim_rom0: bool) -> pathlib.Path:
-    """The 6D ROM0 dump is a 16 MiB mirror of the 8 MiB flash; qemu-eos may want 8 MiB."""
-    source = paths.ROMS / "6D"
+def rom_dir(camera: cameras.Camera, trim_rom0: bool) -> pathlib.Path:
+    """QEMU_EOS_WORKDIR for the camera. With trim_rom0, a ROM0 dump that holds the flash twice
+    (as the 6D's does) is halved into .build/roms/."""
+    source = camera.roms
+    missing = [name for name in ("ROM0.BIN", "ROM1.BIN") if not (source / name).is_file()]
+    if camera.qemu_serial_flash and not (source / "SFDATA.BIN").is_file():
+        missing.append("SFDATA.BIN (dump it with the sf_dump module)")
+    if missing:
+        raise typer.BadParameter(f"{source}: missing {', '.join(missing)}")
     if not trim_rom0:
         return paths.ROMS
-    target = paths.BUILD / "roms" / "6D"
+    target = paths.BUILD / "roms" / camera.model
     target.mkdir(parents=True, exist_ok=True)
     rom0 = (source / "ROM0.BIN").read_bytes()
-    if len(rom0) == 2 * ROM0_SIZE_6D and rom0[:ROM0_SIZE_6D] != rom0[ROM0_SIZE_6D:]:
+    half = len(rom0) // 2
+    if rom0[:half] != rom0[half:]:
         raise typer.BadParameter("ROM0 halves differ: not a mirrored dump, refusing to trim")
-    (target / "ROM0.BIN").write_bytes(rom0[:ROM0_SIZE_6D])
-    rom1 = target / "ROM1.BIN"
-    if not rom1.exists():
-        rom1.symlink_to(source / "ROM1.BIN")
+    (target / "ROM0.BIN").write_bytes(rom0[:half])
+    for name in ("ROM1.BIN", "SFDATA.BIN"):
+        link = target / name
+        if (source / name).exists() and not link.exists():
+            link.symlink_to(source / name)
     return target.parent
 
 
-def debugmsg_address() -> str | None:
-    """DryosDebugMsg address from the 6D stubs, for the qemu-eos logging plugin."""
-    stubs = paths.ML_TREE / "platform" / paths.CAMERA / "stubs.S"
+CRASH_LOCK = "ML/MODULES/LOADING.LCK"
+
+
+def clear_crash_lock(sd_image: pathlib.Path) -> bool:
+    """ML writes LOADING.LCK at boot and deletes it on a clean shutdown; if it is still there,
+    the next boot loads no modules. Stopping the emulator is never a clean shutdown, so the
+    lock is removed before each run. Returns True if one was removed."""
+    with tempfile.TemporaryDirectory(dir=paths.BUILD) as tmp:
+        raw = pathlib.Path(tmp) / "sd.raw"
+        run(["qemu-img", "convert", "-f", "qcow2", "-O", "raw", str(sd_image), str(raw)])
+        card = Card(raw)
+        removed = subprocess.run(["mdel", "-i", card.image, f"::/{CRASH_LOCK}"],
+                                 capture_output=True).returncode == 0
+        if removed:
+            run(["qemu-img", "convert", "-f", "raw", "-O", "qcow2", str(raw), str(sd_image)])
+            shutil.copy2(sd_image, sd_image.with_name("cf.qcow2"))
+    return removed
+
+
+def debugmsg_address(camera: cameras.Camera) -> str | None:
+    """DryosDebugMsg address from the camera's ML stubs, for the qemu-eos logging plugin."""
+    stubs = paths.ML_TREE / "platform" / camera.ml_platform / "stubs.S"
     for line in stubs.read_text().splitlines():
         if "DryosDebugMsg" in line and line.strip().startswith("NSTUB("):
             return line.split("(", 1)[1].split(",", 1)[0].strip()
@@ -174,35 +232,43 @@ def debugmsg_address() -> str | None:
 
 
 @app.command("run")
-def run_camera(display: str = typer.Option("gtk", help="gtk (a window) or none (headless)."),
+def run_camera(camera_name: str = CAMERA_OPTION,
+               display: str = typer.Option("gtk", help="gtk (a window) or none (headless)."),
                boot: bool = typer.Option(True, help="Boot autoexec.bin from the card."),
-               trim_rom0: bool = typer.Option(False, help="Use an 8 MiB copy of ROM0."),
+               trim_rom0: bool = typer.Option(False, help="Use a halved copy of a mirrored ROM0."),
                gdb: bool = typer.Option(False, help="Wait for gdb on port 1234."),
-               debugmsg: bool = typer.Option(True, help="Log DryosDebugMsg to the serial log.")):
-    """Start the emulated 6D. Monitor socket and serial log are in .build/qemu-run/."""
+               debugmsg: bool = typer.Option(True, help="Log DryosDebugMsg to the serial log."),
+               keep_crash_lock: bool = typer.Option(False, help="Leave ML's crash lock on the card "
+                                                                "(ML then skips loading modules).")):
+    """Start the emulated camera. Monitor socket and serial log are in .build/qemu-run/."""
     import os
+    camera = cameras.get(camera_name)
+    build = camera_build(camera)
     qemu = paths.QEMU_BUILD / "arm-softmmu" / "qemu-system-arm"
-    sd_image = CAMERA_BUILD / "sd.qcow2"
+    sd_image = build / "sd.qcow2"
     if not qemu.exists():
         raise typer.BadParameter("qemu-eos missing: run `astroml qemu setup`")
     if not sd_image.exists():
-        raise typer.BadParameter("card image missing: run `astroml qemu sd`")
+        raise typer.BadParameter(f"card image missing: run `astroml qemu sd --camera {camera.model}`")
+    workdir = rom_dir(camera, trim_rom0)
+    if not keep_crash_lock and clear_crash_lock(sd_image):
+        typer.echo(f"removed {CRASH_LOCK} left by the previous run")
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     monitor = RUN_DIR / "monitor"
     monitor.unlink(missing_ok=True)
     cmd = [str(qemu), "-drive", f"if=sd,file={sd_image}",
-           "-drive", f"if=ide,file={CAMERA_BUILD / 'cf.qcow2'}",
+           "-drive", f"if=ide,file={build / 'cf.qcow2'}",
            "-chardev", f"socket,server,nowait,path={monitor},id=monsock",
-           "-mon", "chardev=monsock,mode=readline", "-name", "6D",
-           "-M", f"6D,firmware=boot={1 if boot else 0}", "-display", display,
+           "-mon", "chardev=monsock,mode=readline", "-name", camera.model,
+           "-M", f"{camera.qemu_model},firmware=boot={1 if boot else 0}", "-display", display,
            "-serial", f"file:{RUN_DIR / 'serial.log'}"]
     if gdb:
         cmd += ["-S", "-gdb", "tcp::1234"]
-    address = debugmsg_address() if debugmsg else None
+    address = debugmsg_address(camera) if debugmsg else None
     if address:
         plugin = paths.QEMU_BUILD / "arm-softmmu" / "plugins" / "libmagiclantern.so"
         cmd += ["-plugin", f"{plugin},arg=debugmsg_addr={address}", "-d", "debugmsg"]
-    env = dict(os.environ, QEMU_EOS_WORKDIR=str(rom_dir(trim_rom0)))
+    env = dict(os.environ, QEMU_EOS_WORKDIR=str(workdir))
     typer.echo(f"QEMU_EOS_WORKDIR={env['QEMU_EOS_WORKDIR']} " + " ".join(cmd))
     with (RUN_DIR / "qemu.log").open("w") as log:
         subprocess.run(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, check=False)

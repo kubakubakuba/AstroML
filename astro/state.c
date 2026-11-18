@@ -12,16 +12,17 @@
 
 CONFIG_INT("astro.focal_src", astro_cfg_focal_source, ASTRO_FOCAL_BLIND);
 CONFIG_INT("astro.focal_mm", astro_cfg_focal_mm, 50);
-CONFIG_INT("astro.tgt_cat", astro_cfg_target_catalogue, ASTRO_CAT_M);
-CONFIG_INT("astro.tgt_num", astro_cfg_target_number, 42);
-CONFIG_INT("astro.tgt_mark", astro_cfg_mark_target, 1);
+/* Guidance starts off; the preset target is the Crescent Nebula. */
+CONFIG_INT("astro.tgt_cat", astro_cfg_target_catalogue, ASTRO_CAT_NGC);
+CONFIG_INT("astro.tgt_num", astro_cfg_target_number, 6888);
+CONFIG_INT("astro.tgt_mark", astro_cfg_mark_target, 0);
 CONFIG_INT("astro.ov_stars", astro_cfg_overlay_stars, 1);
 CONFIG_INT("astro.ov_dso", astro_cfg_overlay_dso, 1);
 CONFIG_INT("astro.ov_const", astro_cfg_overlay_constellations, 1);
 CONFIG_INT("astro.ov_dsomag", astro_cfg_overlay_dso_mag, 9);
 CONFIG_INT("astro.af_step", astro_cfg_focus_step, 1);
 CONFIG_INT("astro.af_radius", astro_cfg_focus_radius, 3);
-CONFIG_INT("astro.af_key", astro_cfg_focus_shortcut, ASTRO_SHORTCUT_LIGHT);
+CONFIG_INT("astro.af_key", astro_cfg_focus_shortcut, ASTRO_SHORTCUT_BUTTON);
 CONFIG_INT("astro.af_readout", astro_cfg_focus_readout, 0);
 CONFIG_INT("astro.test_img", astro_cfg_test_image, 0);
 CONFIG_INT("astro.loc_valid", astro_cfg_location_valid, 0);
@@ -31,6 +32,18 @@ CONFIG_INT("astro.loc_utcoff", astro_cfg_utc_offset, 0);
 CONFIG_INT("astro.loc_time", astro_cfg_location_time, 0);
 CONFIG_INT("astro.loc_folder", astro_cfg_location_folder, 0);
 CONFIG_INT("astro.loc_file", astro_cfg_location_file, 0);
+/* Frame-match reference: a plate solution (astro_wcs) and its field of view. */
+CONFIG_INT("astro.ref_ok", astro_cfg_ref_valid, 0);
+CONFIG_INT("astro.ref_ra", astro_cfg_ref_ra0, 0);
+CONFIG_INT("astro.ref_dec", astro_cfg_ref_dec0, 0);
+CONFIG_INT("astro.ref_m0", astro_cfg_ref_m0, 0);
+CONFIG_INT("astro.ref_m1", astro_cfg_ref_m1, 0);
+CONFIG_INT("astro.ref_m2", astro_cfg_ref_m2, 0);
+CONFIG_INT("astro.ref_m3", astro_cfg_ref_m3, 0);
+CONFIG_INT("astro.ref_t0", astro_cfg_ref_t0, 0);
+CONFIG_INT("astro.ref_t1", astro_cfg_ref_t1, 0);
+CONFIG_INT("astro.ref_fov", astro_cfg_ref_fov, 0);
+CONFIG_INT("astro.ref_src", astro_cfg_ref_source, 0);
 
 MODULE_CONFIGS_START()
 MODULE_CONFIG(astro_cfg_focal_source)
@@ -54,6 +67,17 @@ MODULE_CONFIG(astro_cfg_utc_offset)
 MODULE_CONFIG(astro_cfg_location_time)
 MODULE_CONFIG(astro_cfg_location_folder)
 MODULE_CONFIG(astro_cfg_location_file)
+MODULE_CONFIG(astro_cfg_ref_valid)
+MODULE_CONFIG(astro_cfg_ref_ra0)
+MODULE_CONFIG(astro_cfg_ref_dec0)
+MODULE_CONFIG(astro_cfg_ref_m0)
+MODULE_CONFIG(astro_cfg_ref_m1)
+MODULE_CONFIG(astro_cfg_ref_m2)
+MODULE_CONFIG(astro_cfg_ref_m3)
+MODULE_CONFIG(astro_cfg_ref_t0)
+MODULE_CONFIG(astro_cfg_ref_t1)
+MODULE_CONFIG(astro_cfg_ref_fov)
+MODULE_CONFIG(astro_cfg_ref_source)
 MODULE_CONFIGS_END()
 
 #define STATUS_RECENT_MS 10000 /* how long a finished action's status stays in the menu */

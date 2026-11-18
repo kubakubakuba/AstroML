@@ -21,7 +21,6 @@ QEMU_BRANCH = "qemu-eos-v4.2.1"
 QEMU_SOURCE = BUILD / "qemu-eos"
 QEMU_BUILD = BUILD / "qemu-eos-build"
 
-CAMERA = "6D.116"
 MODULE_BUILD = ML_TREE / "modules" / "astro" / "build" / "astro.mo"
 
 # Original Midnight, kept read-only as a regression oracle.

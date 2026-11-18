@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <timer.h>
+#include "camera.h"
 #include "progress.h"
 #include "worker.h"
 
@@ -32,7 +33,7 @@ static struct {
     uint32_t painted_ms;
     char title[TITLE_BYTES];
     char lines[LINES][LINE_BYTES];
-    const char *footer;
+    const char *footer_action; /* what the Q key does now */
 } win;
 
 static uint32_t elapsed_ms(void)
@@ -50,7 +51,7 @@ static void paint_window(void)
                    WINDOW_Y + TITLE_H + i * LINE_H, "%s", win.lines[i]);
     }
     bmp_printf(FONT(FONT_MED, COLOR_GRAY(60), COLOR_BLACK), TEXT_X,
-               WINDOW_Y + WINDOW_H - FOOTER_H + 2, "%s", win.footer);
+               WINDOW_Y + WINDOW_H - FOOTER_H + 2, "%s: %s", astro_q_key(), win.footer_action);
 }
 
 static void paint(void)
@@ -81,7 +82,7 @@ void astro_log_begin(const char *title)
 {
     memset(&win, 0, sizeof(win));
     snprintf(win.title, sizeof(win.title), "%s", title);
-    win.footer = "Q: cancel";
+    win.footer_action = "cancel";
     win.menu_was_open = gui_menu_shown();
     if (win.menu_was_open) {
         gui_stop_menu();
@@ -132,7 +133,7 @@ void astro_log_end(int hold_ms)
         return;
     }
     if (hold_ms > 0 && !astro_cancel_requested()) {
-        win.footer = "Q: close";
+        win.footer_action = "close";
         paint();
         for (int waited = 0; waited < hold_ms && !astro_cancel_requested();
              waited += HOLD_STEP_MS) {

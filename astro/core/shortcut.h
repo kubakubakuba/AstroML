@@ -3,9 +3,6 @@
 #ifndef ASTRO_SHORTCUT_H
 #define ASTRO_SHORTCUT_H
 
-/* 6D.116 platform/gui.h: BGMT_LIGHT, the top-LCD illumination button. */
-#define ASTRO_KEY_6D_LIGHT 0x20
-
 typedef enum {
     ASTRO_SHORTCUT_PASS = 0, /* let Canon handle the key */
     ASTRO_SHORTCUT_AUTOFOCUS = 1,
@@ -20,6 +17,8 @@ typedef struct {
     int electronic_af; /* an AF lens that accepts focus commands */
 } astro_shortcut_state;
 
-astro_shortcut_action astro_shortcut_decide(int raw_key, const astro_shortcut_state *state);
+/* configured_key: the camera's spare button from cameras.toml, or -1 when it has none. */
+astro_shortcut_action astro_shortcut_decide(int raw_key, int configured_key,
+                                            const astro_shortcut_state *state);
 
 #endif

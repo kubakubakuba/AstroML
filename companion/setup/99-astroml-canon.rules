@@ -1,0 +1,2 @@
+# Let the companion's service user open Canon cameras (USB vendor 04a9) without root.
+SUBSYSTEM=="usb", ATTR{idVendor}=="04a9", MODE="0660", GROUP="plugdev"

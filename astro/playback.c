@@ -7,6 +7,8 @@
 #include <menu.h>
 #include <module.h>
 #include <notify_box.h>
+#include "camera.h"
+#include "frame_match.h"
 #include "capture.h"
 #include "draw.h"
 #include "overlay.h"
@@ -33,7 +35,8 @@ static void paint_prompt(void)
 {
     bmp_fill(COLOR_BLACK, 40, 174, 640, 122);
     bmp_printf(FONT(FONT_LARGE, COLOR_YELLOW, COLOR_BLACK), 56, 183, "Solve this photo?");
-    bmp_printf(FONT(FONT_MED, COLOR_WHITE, COLOR_BLACK), 56, 226, "SET: solve    Q: cancel");
+    bmp_printf(FONT(FONT_MED, COLOR_WHITE, COLOR_BLACK), 56, 226, "SET: solve    %s: cancel",
+               astro_q_key());
     bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), 56, 260,
                "No sky coordinates or lens settings needed");
 }
@@ -55,7 +58,8 @@ static void paint_results(void)
     bmp_printf(FONT(FONT_MED, COLOR_WHITE, COLOR_BLACK), 16, 43, "RA: %s", pb.result.ra_text);
     bmp_printf(FONT(FONT_MED, COLOR_WHITE, COLOR_BLACK), 16, 72, "Dec: %s", pb.result.dec_text);
     bmp_printf(FONT(FONT_SMALL, COLOR_WHITE, COLOR_BLACK), 12, 450,
-               "Q: hide  |  LEFT/RIGHT: other photo");
+               "SET: frame-match reference  |  %s: hide  |  LEFT/RIGHT: other photo",
+               astro_q_key());
 }
 
 static void draw_prompt(void)
@@ -96,6 +100,7 @@ void astro_playback_run_solve(void)
         pb.state = VIEW_IDLE;
         astro_set_status("Photo changed; result hidden");
     } else {
+        pb.result.source = ASTRO_REFERENCE_GALLERY;
         astro_remember_solution(&pb.result);
         astro_set_status("Solved %d stars", pb.result.sky.matched);
         pb.state = VIEW_RESULTS;
@@ -132,6 +137,11 @@ unsigned int astro_playback_key(unsigned int key)
         case VIEW_RESULTS:
             if (key == MODULE_KEY_INFO) {
                 return 1;
+            }
+            if (key == MODULE_KEY_PRESS_SET) {
+                astro_frame_set_reference(&pb.result, ASTRO_REFERENCE_GALLERY);
+                NotifyBox(NOTIFY_MS, "Frame match: this photo is the reference");
+                return 0;
             }
             close_view();
             return key == MODULE_KEY_Q ? 0 : 1;

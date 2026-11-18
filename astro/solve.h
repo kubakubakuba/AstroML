@@ -28,6 +28,7 @@ typedef struct {
     char ra_text[16];   /* "05h35m17s" */
     char dec_text[16];  /* "-05d23'12\"" */
     char lens_text[24]; /* "135 mm, FOV 15.1" */
+    int source;         /* astro_reference_source: 0 Live View, 1 gallery, 2 file */
 } astro_solve_result;
 
 #define ASTRO_MIN_STARS 8

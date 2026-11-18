@@ -5,8 +5,9 @@ import math
 import random
 
 from native import MAX_STARS, H, W
+from tools import cameras
 
-SENSORS_MM = {"6D": 35.8, "600D": 22.3}
+SENSORS_MM = {model: camera.sensor_width_mm for model, camera in cameras.load().items()}
 FOCALS_MM = (14, 16, 20, 24, 28, 35, 50, 85, 135, 200, 300)
 SCALE_TOLERANCE = 1.3  # the camera's focal-hint window is +-30 %
 

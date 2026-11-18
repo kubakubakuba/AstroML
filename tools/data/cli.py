@@ -51,6 +51,22 @@ def build_dso(data: pathlib.Path = DataDir,
                ", ".join(f"{k} {v}" for k, v in counts.items()))
 
 
+@app.command("companion-catalog")
+def build_companion_catalog(
+        data: pathlib.Path = DataDir,
+        barnard: pathlib.Path = typer.Option(paths.SOURCES / "barnard_VII_220A.dat"),
+        sharpless: pathlib.Path = typer.Option(paths.SOURCES / "sharpless_VII_20.dat"),
+        dest: pathlib.Path = typer.Option(
+            paths.REPO / "companion" / "astroml_companion" / "catalog.json",
+            help="Packaged with the companion app.")):
+    """Target names for the companion's planner: designation -> RA/Dec and common name."""
+    import json
+
+    entries = dso.companion_entries(dso.load(data, barnard, sharpless))
+    dest.write_text(json.dumps(entries, separators=(",", ":")))
+    typer.echo(f"{dest}: {len(entries):,} designations, {dest.stat().st_size / 1024:.0f} KB")
+
+
 @app.command("constellations")
 def build_constellations(data: pathlib.Path = DataDir):
     """CONST.BIN from d3-celestial figures and names."""

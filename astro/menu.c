@@ -5,6 +5,8 @@
 #include <lens.h>
 #include "core/catalog.h"
 #include "core/wcs.h"
+#include "camera.h"
+#include "frame_match.h"
 #include "gain.h"
 #include "location.h"
 #include "menu.h"
@@ -71,6 +73,44 @@ static MENU_SELECT_FUNC(start_measure)
 static MENU_SELECT_FUNC(start_read_location)
 {
     start(ASTRO_ACTION_READ_LOCATION, 0);
+}
+
+static MENU_SELECT_FUNC(start_frame_match)
+{
+    start(ASTRO_ACTION_FRAME_MATCH, 1);
+}
+
+static MENU_SELECT_FUNC(use_last_solve)
+{
+    astro_frame_use_last_solve();
+}
+
+static MENU_SELECT_FUNC(clear_reference)
+{
+    astro_frame_clear_reference();
+}
+
+static MENU_UPDATE_FUNC(reference_update)
+{
+    char text[40];
+
+    astro_frame_reference_text(text, sizeof(text));
+    MENU_SET_VALUE("%s", text);
+}
+
+static MENU_UPDATE_FUNC(frame_match_update)
+{
+    if (!astro_cfg_ref_valid) {
+        MENU_SET_VALUE("no reference");
+        MENU_SET_WARNING(MENU_WARN_ADVICE, "Solve a photo, then set it as the reference.");
+    }
+}
+
+static MENU_UPDATE_FUNC(guide_update)
+{
+    if (!astro_cfg_mark_target) {
+        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "Turn on Target -> Guidance first.");
+    }
 }
 
 #define STATUS_MENU_BYTES 25 /* fits beside "Solve Live View (3s)" */
@@ -202,7 +242,7 @@ static MENU_UPDATE_FUNC(focal_source_update)
 
 static MENU_UPDATE_FUNC(manual_focal_update)
 {
-    int fov = astro_lens_fov_cdeg(ASTRO_SENSOR_WIDTH_X10, astro_cfg_focal_mm);
+    int fov = astro_lens_fov_cdeg(astro_sensor_width_x10(), astro_cfg_focal_mm);
     MENU_SET_RINFO("FOV %d.%d", fov / 100, fov / 10 % 10);
     if (astro_cfg_focal_source != ASTRO_FOCAL_MANUAL) {
         MENU_SET_WARNING(MENU_WARN_ADVICE, "Used only when the focal source is Manual.");
@@ -229,6 +269,22 @@ static MENU_UPDATE_FUNC(last_lens_update)
     MENU_SET_VALUE("%s", r->valid ? r->lens_text : "--");
 }
 
+/* "Camera button" is the body's spare button from cameras.toml; some bodies have none. */
+static MENU_UPDATE_FUNC(shortcut_update)
+{
+    const astro_camera_profile *camera = astro_camera();
+
+    if (astro_cfg_focus_shortcut != ASTRO_SHORTCUT_BUTTON) {
+        return;
+    }
+    if (camera->focus_key == ASTRO_NO_KEY) {
+        MENU_SET_VALUE("Off");
+        MENU_SET_WARNING(MENU_WARN_NOT_WORKING, "This camera has no spare button for it.");
+    } else {
+        MENU_SET_VALUE("%s button", camera->focus_key_name);
+    }
+}
+
 static struct menu_entry astro_menu[] = {
     {
         .name = "Solve Live View (3s)",
@@ -241,7 +297,7 @@ static struct menu_entry astro_menu[] = {
         .name = "Target",
         .select = menu_open_submenu,
         .update = target_object_update,
-        .help = "Pick an M/NGC/IC/C/B/Sh2 object to guide to and mark on solved frames.",
+        .help = "Pick a catalogue target to mark and guide to.",
         .children =
             (struct menu_entry[]){
                 {.name = "Catalogue",
@@ -265,41 +321,39 @@ static struct menu_entry astro_menu[] = {
                  .update = target_sky_update,
                  .icon_type = IT_ACTION,
                  .help = "Altitude/azimuth and rise/set, from Location and the camera clock."},
-                {.name = "Mark target",
+                {.name = "Guidance",
                  .priv = &astro_cfg_mark_target,
                  .max = 1,
-                 .help = "Show the target, or an arrow to it, on every solved frame."},
+                 .help = "Mark the target, or an arrow to it, on solved frames; enables Guide."},
                 MENU_EOL,
             },
     },
     {
         .name = "Guide to target",
         .select = start_guide,
+        .update = guide_update,
         .icon_type = IT_ACTION,
         .help = "1x photo Live View: re-solves and points to the target. Q stops.",
         .help2 = "Set the lens focal length for much faster updates.",
     },
     {
-        .name = "Polar alignment",
+        .name = "Frame match",
         .select = menu_open_submenu,
-        .update = polar_update,
-        .help = "Two solves around the RA axis find the mount axis; then adjust alt/az.",
+        .update = frame_match_update,
+        .help = "Return to the position and rotation of an earlier, solved photo.",
         .children =
             (struct menu_entry[]){
-                {.name = "1. Capture A",
-                 .select = start_polar_first,
+                {.name = "Reference", .update = reference_update, .icon_type = IT_ACTION},
+                {.name = "Use last solve",
+                 .select = use_last_solve,
                  .icon_type = IT_ACTION,
-                 .help = "Point near the pole, tracking on. Solves the Live View frame."},
-                {.name = "2. Rotate RA, capture B",
-                 .select = start_polar_second,
+                 .help = "Solve the photo first (gallery, Live View or file), then pick this.",
+                 .help2 = "In the gallery, SET on the solve result also sets it."},
+                {.name = "Match in Live View",
+                 .select = start_frame_match,
                  .icon_type = IT_ACTION,
-                 .help = "Turn the RA axis 30-90 degrees first."},
-                {.name = "3. Adjust",
-                 .select = start_polar_adjust,
-                 .icon_type = IT_ACTION,
-                 .help = "Turn the alt/az knobs until the reticle sits in the circle. Q stops.",
-                 .help2 = "Read the location first for altitude/azimuth directions."},
-                {.name = "Status", .update = polar_update, .icon_type = IT_ACTION},
+                 .help = "1x photo Live View: shows the reference frame and how to move. Q stops."},
+                {.name = "Clear reference", .select = clear_reference, .icon_type = IT_ACTION},
                 MENU_EOL,
             },
     },
@@ -332,7 +386,8 @@ static struct menu_entry astro_menu[] = {
                 {.name = "Shortcut",
                  .priv = &astro_cfg_focus_shortcut,
                  .max = 3,
-                 .choices = CHOICES("Off", "Double half-press", "INFO button", "LCD-light button"),
+                 .update = shortcut_update,
+                 .choices = CHOICES("Off", "Double half-press", "INFO button", "Camera button"),
                  .help = "Photo Live View only. Off keeps the Canon button behaviour."},
                 MENU_EOL,
             },
@@ -370,7 +425,7 @@ static struct menu_entry astro_menu[] = {
         .name = "Location",
         .select = menu_open_submenu,
         .update = location_position_update,
-        .help = "From the GPS fix in your newest photo (6D GPS on). Needed for alt/az.",
+        .help = "Get the current location from the latest photo taken.",
         .children =
             (struct menu_entry[]){
                 {.name = "Read newest photo",
@@ -391,7 +446,7 @@ static struct menu_entry astro_menu[] = {
     {
         .name = "Lens",
         .select = menu_open_submenu,
-        .help = "Optional solving hint. Blind solving needs no lens data.",
+        .help = "Set the lens focal length, optional for plate solving.",
         .children =
             (struct menu_entry[]){
                 {.name = "Focal length source",
@@ -424,6 +479,30 @@ static struct menu_entry astro_menu[] = {
                  .update = last_lens_update,
                  .icon_type = IT_ACTION,
                  .help = "Focal length measured from the solved field."},
+                MENU_EOL,
+            },
+    },
+    {
+        .name = "Polar alignment",
+        .select = menu_open_submenu,
+        .update = polar_update,
+        .help = "Two solves around the RA axis find the mount axis; then adjust alt/az.",
+        .children =
+            (struct menu_entry[]){
+                {.name = "1. Capture A",
+                 .select = start_polar_first,
+                 .icon_type = IT_ACTION,
+                 .help = "Point near the pole, tracking on. Solves the Live View frame."},
+                {.name = "2. Rotate RA, capture B",
+                 .select = start_polar_second,
+                 .icon_type = IT_ACTION,
+                 .help = "Turn the RA axis 30-90 degrees first."},
+                {.name = "3. Adjust",
+                 .select = start_polar_adjust,
+                 .icon_type = IT_ACTION,
+                 .help = "Turn the alt/az knobs until the reticle sits in the circle. Q stops.",
+                 .help2 = "Read the location first for altitude/azimuth directions."},
+                {.name = "Status", .update = polar_update, .icon_type = IT_ACTION},
                 MENU_EOL,
             },
     },

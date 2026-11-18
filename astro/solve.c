@@ -8,6 +8,7 @@
 #include "core/star_detect.h"
 #include "core/streak.h"
 #include "core/wcs.h"
+#include "camera.h"
 #include "progress.h"
 #include "sdcard.h"
 #include "solve.h"
@@ -139,7 +140,7 @@ static void hint_window(astro_sky_options *options, int *hinted)
         return;
     }
     int64_t scale = (int64_t)ASTRO_IMAGE_WIDTH * focal * 65536 * 31416 /
-                    ((int64_t)ASTRO_SENSOR_WIDTH_X10 * 18000 * 10000);
+                    ((int64_t)astro_sensor_width_x10() * 18000 * 10000);
     options->scale_min = (uint32_t)(scale * HINT_LOW_NUM / HINT_LOW_DEN);
     options->scale_max = (uint32_t)(scale * HINT_HIGH_NUM / HINT_HIGH_DEN);
 }
@@ -174,7 +175,7 @@ static void format_result(astro_solve_result *r)
              arcsec / 3600, arcsec / 60 % 60, arcsec % 60);
 
     int fov = r->sky.fov_cdeg;
-    int focal_x10 = astro_lens_focal_x10(ASTRO_SENSOR_WIDTH_X10, fov);
+    int focal_x10 = astro_lens_focal_x10(astro_sensor_width_x10(), fov);
     snprintf(r->lens_text, sizeof(r->lens_text), "%d mm, FOV %d.%d", (focal_x10 + 5) / 10,
              fov / 100, fov / 10 % 10);
 }

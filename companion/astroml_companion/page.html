@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AstroML</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 30rem; padding: 1rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 1.25rem 0 .25rem; }
+  nav a { margin-right: 1rem; }
+  .muted { opacity: .65; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; margin: 0; }
+  dt { opacity: .65; }
+  dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .buttons { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+  button { font: inherit; padding: .5rem .9rem; }
+  input { font: inherit; width: 5rem; }
+  .error { color: #c0392b; }
+</style>
+</head>
+<body>
+<h1>AstroML</h1>
+<nav><a href="/">Status</a><a href="/plan">Plan</a></nav>
+<p id="link" class="muted">Connecting...</p>
+
+<h2>Session</h2>
+<dl id="session"><dt>Status</dt><dd class="muted">no plan yet</dd></dl>
+<div class="buttons">
+  <button data-session="start">Start / resume</button>
+  <button data-session="pause">Pause</button>
+  <button data-session="skip">Skip framing</button>
+  <button data-session="stop">Stop</button>
+</div>
+
+<h2>Camera</h2>
+<dl id="camera"><dt>Status</dt><dd class="muted">-</dd></dl>
+
+<h2>Mount</h2>
+<dl id="mount"><dt>Status</dt><dd class="muted">none configured</dd></dl>
+
+<h2>Last solve</h2>
+<dl id="solution"><dt>Status</dt><dd class="muted">no solve yet</dd></dl>
+
+<h2>Frame-match reference</h2>
+<dl id="reference"><dt>Status</dt><dd class="muted">not set</dd></dl>
+
+<h2>Manual</h2>
+<div class="buttons">
+  <button id="solve">Solve Live View</button>
+  <label>Test exposure <input id="seconds" type="number" min="1" max="1800" value="10"> s</label>
+  <button id="expose">Expose</button>
+  <button id="cancel">Cancel</button>
+</div>
+<p id="message" class="muted"></p>
+<p id="error" class="error"></p>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function fill(id, items) {
+  const list = $(id);
+  list.replaceChildren();
+  for (const [name, value] of items) {
+    const dt = document.createElement("dt"); dt.textContent = name;
+    const dd = document.createElement("dd"); dd.textContent = value;
+    list.append(dt, dd);
+  }
+}
+
+const solveRows = (r) => [
+  ["RA", r.ra], ["Dec", r.dec], ["Field", r.fov_deg.toFixed(1) + "°"],
+  ["North", r.north_deg.toFixed(1) + "° from up"], ["Stars", r.matched],
+  ["Source", r.source], ["Age", r.age_s === null ? "-" : r.age_s + " s"],
+];
+
+function cameraRows(c) {
+  if (!c) return [["Status", "-"]];
+  const rows = [["Live View", c.liveview_ready ? "1x photo, ready" : "off"],
+                ["Exposure", c.exposure.state + (c.exposure.number ? " (#" + c.exposure.number +
+                  ", " + c.exposure.seconds + " s" + (c.exposure.photo ? ", " + c.exposure.photo : "") + ")" : "")]];
+  if (c.match.running) {
+    rows.push(["Framing", (c.match.panel ? "panel " + c.match.panel + ": " : "") +
+               (c.match.matched ? "MATCHED" : c.match.separation_deg + "° off" +
+                (c.match.rotation_deg === null ? "" : ", turn " + c.match.rotation_deg + "°"))]);
+  }
+  return rows;
+}
+
+function mountRows(m) {
+  if (!m) return [["Status", "none configured"]];
+  if (!m.connected) return [["Status", "not connected: " + m.detail]];
+  const rows = [["Mount", m.detail]];
+  if (m.ra) rows.push(["Pointing", m.ra + "  " + m.dec]);
+  return rows;
+}
+
+function sessionRows(s) {
+  if (!s.plan) return [["Status", "no plan yet"]];
+  return [["Target", s.plan.name || (s.plan.ra_deg.toFixed(3) + ", " + s.plan.dec_deg.toFixed(3))],
+          ["Phase", s.phase + (s.paused ? " (paused)" : "")],
+          ["Panel", s.panel + " of " + s.panels], ["Frame", s.frame + " of " + s.frames],
+          ["Note", s.message || "-"]];
+}
+
+async function refresh() {
+  try {
+    const s = await (await fetch("/api/status", {cache: "no-store"})).json();
+    $("link").textContent = s.connected ? "Connected to " + (s.camera || "camera") : "Camera not connected";
+    fill("session", sessionRows(s.session));
+    fill("camera", cameraRows(s.camera_status));
+    fill("mount", mountRows(s.mount));
+    fill("solution", s.solution ? solveRows(s.solution) : [["Status", "no solve yet"]]);
+    fill("reference", s.reference ? solveRows(s.reference) : [["Status", "not set"]]);
+    $("message").textContent = s.message;
+    $("error").textContent = s.connected ? "" : s.error;
+  } catch (e) {
+    $("link").textContent = "Companion not reachable";
+  }
+}
+
+async function post(path, body) {
+  const response = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"},
+                                      body: JSON.stringify(body || {})});
+  const data = await response.json().catch(() => ({}));
+  $("error").textContent = response.ok ? "" : (data.error || "request failed");
+  refresh();
+}
+
+for (const button of document.querySelectorAll("[data-session]")) {
+  button.onclick = () => post("/api/session/" + button.dataset.session);
+}
+$("solve").onclick = () => post("/api/solve");
+$("expose").onclick = () => post("/api/expose", {seconds: Number($("seconds").value)});
+$("cancel").onclick = () => post("/api/cancel");
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
